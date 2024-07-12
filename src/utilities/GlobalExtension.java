@@ -1,41 +1,31 @@
 package utilities;
 
-import gen.japyParser;
-
-import java.util.List;
+import compiler.SymbolTable;
 
 public class GlobalExtension {
-    public static boolean isEntryClass(List<japyParser.MethodDeclarationContext> methods) {
-        for (var method : methods) {
-            var hitPublicMethod = method.methodAccessModifier.getText().equals("public");
-            var hitIntReturnType = method.t != null && method.t.st.getText().equals("int");
-            var hitNullableParameters = method.param1 == null && method.param2 == null;
-            var hitMainMethodName = method.methodName.getText().equals("main");
 
-            if (hitPublicMethod && hitIntReturnType && hitNullableParameters && hitMainMethodName)
-                return true;
-        }
-
-        return false;
-    }
-
-    public static void prepareParameterList(japyParser.MethodDeclarationContext ctx) {
-//        System.out.println();
-        if (ctx.param1 == null && ctx.param2 == null) {
-            System.out.printf(tabbedString(3) + "parameter list: []");
-        } else if (ctx.param1 != null && ctx.param2 != null) {
-            System.out.printf(tabbedString(3) + "parameter list: [type: %s / name: %s], [type: %s / name: %s]", ctx.typeP1.getText(), ctx.param1.getText(), ctx.typeP2.getText(), ctx.param2.getText());
-        } else {
-            if (ctx.param1 != null) {
-                System.out.printf(tabbedString(3) + "parameter list: [type: %s / name: %s]", ctx.typeP1.getText(), ctx.param1.getText());
-            } else {
-                System.out.printf(tabbedString(3) + "parameter list: [type: %s / name: %s]", ctx.typeP2.getText(), ctx.param2.getText());
+    public static SymbolTable findItemScope(String itemKey, SymbolTable currentScope) {
+        SymbolTable st = currentScope;
+        while (st != null) {
+            if (st.map.containsKey(itemKey)){
+                return st;
             }
+            st = st.parentNode;
         }
-        System.out.println();
+        return st;
     }
 
-    public static String tabbedString(int count) {
-        return "\t".repeat(count);
+    public static String findItemValue(String itemKey, SymbolTable currentSco
+    ) {
+        var scope = findItemScope(itemKey, currentSco);
+        return scope.lookUp(itemKey);
+    }
+
+    public static boolean doesKeyExistInScope(String itemKey, SymbolTable currentSco) {
+        return findItemScope(itemKey, currentSco) != null;
+    }
+
+    public static String getIndentationString(int indent) {
+        return "    ".repeat(Math.max(0, indent));
     }
 }

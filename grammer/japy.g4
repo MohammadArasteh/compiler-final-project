@@ -45,31 +45,18 @@ closedStatement :
     | decStat=statementDec
 ;
 
-closedConditional :
-    'if' '(' ifExp=expression ')' ifStat=closedStatement
-    ('elif' '(' elifExp=expression ')' elifStat=closedStatement)*
-    'else' elseStmt=closedStatement
-;
+closedConditional: if elif* closeElse;
+openConditional: if elif* openElse?;
 
-openConditional:
-    'if' '(' ifExp=expression ')' ifStat=statement
-    | (
-    'if' '(' ifExp=expression ')' secondIfStat=closedStatement
-    ('elif' '(' elifExp=expression ')' elifStat=closedStatement )*
-    'elif' '(' lastElifExp=expression ')' lastElifStmt=statement
-    )
-    | (
-    'if' '(' ifExp=expression ')' thirdIfStat=closedStatement
-    ('elif' '(' elifExp=expression ')' elifStat=closedStatement)*
-    'else' elseStmt=openStatement
-    )
-;
+if:'if' '(' ifExp=expression ')' thirdIfStat=closedStatement;
+elif:'elif' '(' elifExp=expression ')' elifStat=closedStatement;
+closeElse: 'else' elseStmt=closedStatement;
+openElse:'else' elseStmt=openStatement;
 
 openStatement :
     s1 = statementOpenLoop
     | conditionalStat=openConditional
     ;
-
 
 statement:
 	s1 = closedStatement

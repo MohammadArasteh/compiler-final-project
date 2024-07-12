@@ -3,123 +3,93 @@ package compiler;
 import gen.japyListener;
 import gen.japyParser;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.tree.ErrorNode;
+import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import utilities.GlobalExtension;
 
-public class ProgramPrinter implements japyListener {
+import java.util.ArrayList;
+import java.util.Stack;
+import java.util.stream.Collectors;
 
-    private int indentation = 0;
+public class ProgramPrinter  implements japyListener {
+    ErrorHandler errorHandler = new ErrorHandler();
+    GlobalScope scope = new GlobalScope();
+    Stack<SymbolTable> scopes = new Stack<SymbolTable>();
+    private String returnType;
+    int indentation = 0;
 
-    public int getIndentation() {
-        return this.indentation;
+    int program_counter = 1;
+    Stack<Number> loopsStartingLines = new Stack<>();
+    Stack<Number> loopsEndingLines = new Stack<>();
+
+    private void indentedPrintf(String str, Object... args) {
+        System.out.printf(this.program_counter + ".\t" + this.indentedString(str) + "\n", args);
+        program_counter++;
     }
-
-    public void setIndentation(int indentation) {
-        this.indentation = indentation;
+    private void indentedPrint(String str) {
+        System.out.print(this.program_counter + ".\t" + this.indentedString(str) + "\n");
+        program_counter++;
     }
-
-    private String className;
-
-    public String getClassName() {
-        return this.className;
-    }
-
-    public void setClassName(String className) {
-        this.className = className;
-    }
-
-    private String classParent;
-
-    public String getClassParent() {
-        return this.classParent;
-    }
-
-    public void setClassParent(String classParent) {
-        this.classParent = classParent;
-    }
-
-    private boolean isEntry;
-
-    public boolean getIsEntry() {
-        return this.isEntry;
-    }
-
-    public void setIsEntry(boolean isEntry) {
-        this.isEntry = isEntry;
+    private String indentedString(String str) {
+        return GlobalExtension.getIndentationString(indentation) + str;
     }
 
     @Override
     public void enterProgram(japyParser.ProgramContext ctx) {
-        System.out.println("program start {");
-        setIndentation(0);
+
     }
 
     @Override
     public void exitProgram(japyParser.ProgramContext ctx) {
-        setIndentation(0);
-        System.out.println("}");
     }
 
     @Override
     public void enterClassDeclaration(japyParser.ClassDeclarationContext ctx) {
-        setIndentation(1);
-        setIsEntry(GlobalExtension.isEntryClass(ctx.methodDeclaration()));
-
-        if (getIsEntry()) return;
-
-        setClassName(ctx.className.getText());
-        setClassParent(ctx.classParent == null ? "none" : ctx.classParent.getText());
-
-        System.out.print(GlobalExtension.tabbedString(getIndentation()));
-        System.out.printf("class: %s / class parent: %s / isEntry: %b {", getClassName(), this.getClassParent(), getIsEntry());
-        System.out.println();
+        indentation++;
+        StringBuilder result = new StringBuilder("<class '%s'");
+        if(ctx.access_modifier() != null) result.append(", %s");
+        if(ctx.classParent != null) result.append(", inherits '%s'");
+        if(ctx.access_modifier() != null && ctx.classParent != null)
+            indentedPrintf(result.toString(), ctx.className.getText(), ctx.access_modifier().getText(), ctx.classParent.getText());
+        else if(ctx.access_modifier() == null && ctx.classParent != null)
+            indentedPrintf(result.toString(), ctx.className.getText() , ctx.classParent.getText());
+        else if(ctx.access_modifier() != null && ctx.classParent == null) {
+            indentedPrintf(result.toString(), ctx.className.getText() , ctx.access_modifier().getText());
+        }
+        else indentedPrintf(result.toString(), ctx.className.getText());
     }
 
     @Override
     public void exitClassDeclaration(japyParser.ClassDeclarationContext ctx) {
-        if (getIsEntry()) return;
-        setIndentation(1);
-        System.out.println(GlobalExtension.tabbedString(getIndentation()) + "}");
+        indentedPrintf("</class>");
+        indentation--;
     }
 
     @Override
     public void enterEntryClassDeclaration(japyParser.EntryClassDeclarationContext ctx) {
-        var context = ctx.classDeclaration();
 
-        setIndentation(1);
-        setIsEntry(GlobalExtension.isEntryClass(context.methodDeclaration()));
-        if (!getIsEntry()) return;
-
-        setClassName(context.className.getText());
-        setClassParent(context.classParent == null ? "none" : context.classParent.getText());
-
-        System.out.print(GlobalExtension.tabbedString(getIndentation()));
-        System.out.printf("class: %s / class parents: %s / isEntry: %b {", getClassName(), getClassParent(), getIsEntry());
-        System.out.println();
     }
 
     @Override
     public void exitEntryClassDeclaration(japyParser.EntryClassDeclarationContext ctx) {
-        var context = ctx.classDeclaration();
 
-        if (!GlobalExtension.isEntryClass(context.methodDeclaration())) return;
-
-        setIndentation(1);
-        System.out.println(GlobalExtension.tabbedString(getIndentation()) + "}");
     }
 
     @Override
     public void enterFieldDeclaration(japyParser.FieldDeclarationContext ctx) {
-        setIndentation(2);
-        System.out.print(GlobalExtension.tabbedString(getIndentation()));
-        System.out.printf("filed: %s / type: %s", ctx.fieldName.getText(), ctx.fieldType.st.getText());
+        indentation++;
+        var modifier = "public";
+        if(ctx.access_modifier() != null) modifier = ctx.access_modifier().getText();
+        var names = new ArrayList<String>();
+        ctx.ID().forEach(id -> names.add(id.getText()));
+        indentedPrintf(String.join(", ", names) + ": (field, %s, %s)", modifier, ctx.fieldType.getText());
     }
 
     @Override
     public void exitFieldDeclaration(japyParser.FieldDeclarationContext ctx) {
-        setIndentation(2);
-        System.out.println();
+        indentation--;
     }
 
     @Override
@@ -134,40 +104,30 @@ public class ProgramPrinter implements japyListener {
 
     @Override
     public void enterMethodDeclaration(japyParser.MethodDeclarationContext ctx) {
-        setIndentation(2);
-        System.out.print(GlobalExtension.tabbedString(getIndentation()));
-
-        String MAIN = "main";
-        if (getIsEntry() && ctx.methodName.getText().equals(MAIN)) {
-            System.out.printf("main method / type %s {\n", ctx.t.st.getText());
-            setIndentation(3);
-            return;
-        }
-
-        if (ctx.methodName.getText().equals(getClassName())) {
-            System.out.printf("class constructor: %s / return type: %s / type: %s {\n", ctx.methodName.getText(),
-                    ctx.t.st.getText(), ctx.methodAccessModifier.getText());
-        } else {
-            System.out.printf("class method: %s / return type: %s / type: %s {\n", ctx.methodName.getText(),
-                    ctx.t.st.getText(), ctx.methodAccessModifier.getText());
-
-        }
-
-        GlobalExtension.prepareParameterList(ctx);
-
-        setIndentation(3);
+        indentation++;
+        var modifier = "public";
+        if(ctx.access_modifier() != null) modifier = ctx.access_modifier().getText();
+        var params = new ArrayList<String>();
+        var ids = ctx.ID();
+        var types = ctx.japyType();
+        ids.remove(0);
+        returnType = ctx.t.getText();
+        types.remove(types.size() -1);
+        for(var i = 0; i < ids.size(); i++)
+            params.add("(" + ids.get(i) + ", " + types.get(i).getText() + ")");
+        indentedPrintf("<function '%s, %s, parameters: %s'>", ctx.methodName.getText(), modifier, params);
+        indentation++;
     }
 
     @Override
     public void exitMethodDeclaration(japyParser.MethodDeclarationContext ctx) {
-        setIndentation(2);
-        System.out.print(GlobalExtension.tabbedString(getIndentation()) + "}");
-        System.out.println();
+        indentation--;
+        indentedPrintf("</function %s>", returnValue);
+        indentation--;
     }
 
     @Override
     public void enterClosedStatement(japyParser.ClosedStatementContext ctx) {
-
     }
 
     @Override
@@ -175,22 +135,72 @@ public class ProgramPrinter implements japyListener {
 
     }
 
+
     @Override
     public void enterClosedConditional(japyParser.ClosedConditionalContext ctx) {
+
     }
 
     @Override
     public void exitClosedConditional(japyParser.ClosedConditionalContext ctx) {
+
     }
 
     @Override
     public void enterOpenConditional(japyParser.OpenConditionalContext ctx) {
-
     }
 
     @Override
     public void exitOpenConditional(japyParser.OpenConditionalContext ctx) {
 
+    }
+
+    @Override
+    public void enterIf(japyParser.IfContext ctx) {
+        indentedPrint("<if condition: " + ctx.ifExp.getText());
+        indentation++;
+    }
+
+    @Override
+    public void exitIf(japyParser.IfContext ctx) {
+        indentation--;
+        indentedPrint("</if>");
+    }
+
+    @Override
+    public void enterElif(japyParser.ElifContext ctx) {
+        indentedPrint("<elif condition: " + ctx.elifExp.getText() + ">");
+        indentation++;
+    }
+
+    @Override
+    public void exitElif(japyParser.ElifContext ctx) {
+        indentation--;
+        indentedPrint("</elif>");
+    }
+
+    @Override
+    public void enterCloseElse(japyParser.CloseElseContext ctx) {
+        indentedPrint("<else>");
+        indentation++;
+    }
+
+    @Override
+    public void exitCloseElse(japyParser.CloseElseContext ctx) {
+        indentation--;
+        indentedPrint("</else>");
+    }
+
+    @Override
+    public void enterOpenElse(japyParser.OpenElseContext ctx) {
+        indentedPrint("<else>");
+        indentation++;
+    }
+
+    @Override
+    public void exitOpenElse(japyParser.OpenElseContext ctx) {
+        indentation--;
+        indentedPrint("</else>");
     }
 
     @Override
@@ -215,33 +225,32 @@ public class ProgramPrinter implements japyListener {
 
     @Override
     public void enterStatementVarDef(japyParser.StatementVarDefContext ctx) {
-        System.out.printf(GlobalExtension.tabbedString(getIndentation()) + "field: %s / type: local var", ctx.i1.getText());
+        var ids = ctx.ID();
+        var expressions = ctx.expression();
+        indentedPrintf(
+                ids.stream().map(ParseTree::getText).collect(Collectors.joining())
+                        + ": "
+                        + expressions.stream().map(RuleContext::getText).collect(Collectors.joining(", "))
+                        + " -> (var)");
     }
 
     @Override
     public void exitStatementVarDef(japyParser.StatementVarDefContext ctx) {
-        System.out.println();
     }
 
     @Override
     public void enterStatementBlock(japyParser.StatementBlockContext ctx) {
-        if (!getIsEntry()) {
-            System.out.println(GlobalExtension.tabbedString(getIndentation()) + "nested {");
-            setIndentation(4);
-        }
+
     }
 
     @Override
     public void exitStatementBlock(japyParser.StatementBlockContext ctx) {
-        if (!getIsEntry()) {
-            setIndentation(3);
-            System.out.println(GlobalExtension.tabbedString(getIndentation()) + "}");
-        }
+
     }
 
     @Override
     public void enterStatementContinue(japyParser.StatementContinueContext ctx) {
-
+        indentedPrintf("goto %s", loopsStartingLines.peek());
     }
 
     @Override
@@ -251,7 +260,7 @@ public class ProgramPrinter implements japyListener {
 
     @Override
     public void enterStatementBreak(japyParser.StatementBreakContext ctx) {
-
+        indentedPrintf("goto %s", loopsEndingLines.peek());
     }
 
     @Override
@@ -259,9 +268,10 @@ public class ProgramPrinter implements japyListener {
 
     }
 
+    String returnValue;
     @Override
     public void enterStatementReturn(japyParser.StatementReturnContext ctx) {
-
+        returnValue = "return (" + ctx.e.getText() + ", " + returnType + ")";
     }
 
     @Override
@@ -271,22 +281,34 @@ public class ProgramPrinter implements japyListener {
 
     @Override
     public void enterStatementClosedLoop(japyParser.StatementClosedLoopContext ctx) {
-
+        loopsStartingLines.push(ctx.getStart().getLine());
+        loopsEndingLines.push(ctx.getStop().getLine());
+        indentedPrint("<while condition: <" + ctx.e.getText() + ">>");
+        indentation++;
     }
 
     @Override
     public void exitStatementClosedLoop(japyParser.StatementClosedLoopContext ctx) {
-
+        loopsStartingLines.pop();
+        loopsEndingLines.pop();
+        indentation--;
+        indentedPrint("</while>");
     }
 
     @Override
     public void enterStatementOpenLoop(japyParser.StatementOpenLoopContext ctx) {
-        System.out.println("nested {");
+        loopsStartingLines.push(ctx.getStart().getLine());
+        loopsEndingLines.push(ctx.getStop().getLine());
+        indentedPrint("<while condition: <" + ctx.e.getText() + ">>");
+        indentation++;
     }
 
     @Override
     public void exitStatementOpenLoop(japyParser.StatementOpenLoopContext ctx) {
-        System.out.println("}");
+        loopsStartingLines.pop();
+        loopsEndingLines.pop();
+        indentation--;
+        indentedPrint("</while>");
     }
 
     @Override
@@ -301,72 +323,37 @@ public class ProgramPrinter implements japyListener {
 
     @Override
     public void enterStatementAssignment(japyParser.StatementAssignmentContext ctx) {
-        setIndentation(3);
-
-        var leftExpression = ctx.expression().get(0)
-                .expressionOr()
-                .expressionAnd()
-                .expressionEq()
-                .expressionCmp()
-                .expressionAdd()
-                .expressionMultMod()
-                .expressionUnary()
-                .expressionMethods()
-                .expressionOther();
-
-        var rightExpression = ctx.expression().get(1)
-                .expressionOr()
-                .expressionAnd()
-                .expressionEq()
-                .expressionCmp()
-                .expressionAdd()
-                .expressionMultMod()
-                .expressionUnary()
-                .expressionMethods()
-                .expressionOther();
-
-        if (rightExpression.st != null) {
-            System.out.println(GlobalExtension.tabbedString(getIndentation()) + String.format("field: %s / type: %s[]", leftExpression.i1.getText(), rightExpression.st.getText()));
-        }
-
-        if (rightExpression.i != null) {
-            System.out.println(GlobalExtension.tabbedString(getIndentation()) + String.format("field: %s / type: %s", leftExpression.i1.getText(), rightExpression.i.getText()));
-        }
+        indentedPrint(ctx.right.getText() + " -> " + ctx.left.getText());
     }
 
     @Override
     public void exitStatementAssignment(japyParser.StatementAssignmentContext ctx) {
-
     }
 
     @Override
     public void enterStatementInc(japyParser.StatementIncContext ctx) {
-
+        indentedPrintf("%s + 1 -> %s", ctx.lvalExpr.getText(), ctx.lvalExpr.getText());
     }
 
     @Override
     public void exitStatementInc(japyParser.StatementIncContext ctx) {
-
     }
 
     @Override
     public void enterStatementDec(japyParser.StatementDecContext ctx) {
-
+        indentedPrintf("%s - 1 -> %s", ctx.lvalExpr.getText(), ctx.lvalExpr.getText());
     }
 
     @Override
     public void exitStatementDec(japyParser.StatementDecContext ctx) {
-
     }
 
     @Override
     public void enterExpression(japyParser.ExpressionContext ctx) {
-
     }
 
     @Override
     public void exitExpression(japyParser.ExpressionContext ctx) {
-
     }
 
     @Override
@@ -538,7 +525,6 @@ public class ProgramPrinter implements japyListener {
     public void exitJapyType(japyParser.JapyTypeContext ctx) {
 
     }
-
 
     @Override
     public void enterSingleType(japyParser.SingleTypeContext ctx) {

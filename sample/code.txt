@@ -1,0 +1,11 @@
+MAIN class Sample begin
+    func test() returns double begin
+        while(true) begin
+           while(true) begin
+                continue
+                break
+           end
+           continue
+        end
+    end
+end

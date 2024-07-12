@@ -9,9 +9,9 @@ import org.antlr.v4.runtime.tree.ParseTreeWalker;
 import java.io.IOException;
 import java.nio.file.Paths;
 
-public class Compiler {
+public class Main {
     public static void main(String[] args) throws IOException {
-        var path = Paths.get("sample", "input-2.trl");
+        var path = Paths.get("sample", "code.txt");
         var stream = CharStreams.fromFileName(path.toString());
         var lexer = new japyLexer(stream);
         var tokens = new CommonTokenStream(lexer);
