@@ -10,13 +10,14 @@ import org.antlr.v4.runtime.tree.TerminalNode;
 import utilities.GlobalExtension;
 
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.Stack;
 import java.util.stream.Collectors;
 
 public class ProgramPrinter  implements japyListener {
     ErrorHandler errorHandler = new ErrorHandler();
-    GlobalScope scope = new GlobalScope();
-    Stack<SymbolTable> scopes = new Stack<SymbolTable>();
+    GlobalScope globalScope = new GlobalScope("GlobalScope");
+    String currentClassScope, currentMethodScope, currentBlockScope;
     private String returnType;
     int indentation = 0;
 
@@ -43,14 +44,20 @@ public class ProgramPrinter  implements japyListener {
 
     @Override
     public void exitProgram(japyParser.ProgramContext ctx) {
+        globalScope.tablePrinter();
     }
 
     @Override
     public void enterClassDeclaration(japyParser.ClassDeclarationContext ctx) {
+        globalScope.classes.add(new ClassScope(ctx));
+        globalScope.insert("class_" + ctx.className.getText(), GlobalExtension.getClassAttributes(ctx));
+        currentClassScope = ctx.className.getText();
+
         indentation++;
         StringBuilder result = new StringBuilder("<class '%s'");
         if(ctx.access_modifier() != null) result.append(", %s");
         if(ctx.classParent != null) result.append(", inherits '%s'");
+        result.append(">");
         if(ctx.access_modifier() != null && ctx.classParent != null)
             indentedPrintf(result.toString(), ctx.className.getText(), ctx.access_modifier().getText(), ctx.classParent.getText());
         else if(ctx.access_modifier() == null && ctx.classParent != null)
@@ -79,6 +86,9 @@ public class ProgramPrinter  implements japyListener {
 
     @Override
     public void enterFieldDeclaration(japyParser.FieldDeclarationContext ctx) {
+        var scope = globalScope.lookupClass(currentClassScope);
+        scope.insert("field_" + ctx.fieldName.getText(), GlobalExtension.getFieldAttributes(ctx));
+
         indentation++;
         var modifier = "public";
         if(ctx.access_modifier() != null) modifier = ctx.access_modifier().getText();
@@ -104,6 +114,11 @@ public class ProgramPrinter  implements japyListener {
 
     @Override
     public void enterMethodDeclaration(japyParser.MethodDeclarationContext ctx) {
+        currentMethodScope = ctx.methodName.getText();
+        var scope = globalScope.lookupClass(currentClassScope);
+        scope.methods.add(new MethodScope(ctx));
+        scope.insert("function_" + ctx.methodName.getText(), GlobalExtension.getMethodAttributes(ctx));
+
         indentation++;
         var modifier = "public";
         if(ctx.access_modifier() != null) modifier = ctx.access_modifier().getText();
@@ -122,7 +137,8 @@ public class ProgramPrinter  implements japyListener {
     @Override
     public void exitMethodDeclaration(japyParser.MethodDeclarationContext ctx) {
         indentation--;
-        indentedPrintf("</function %s>", returnValue);
+        indentedPrintf("</function return %s>", Objects.equals(returnType, "void") ? "void" : returnValue == null ? "null" : returnValue);
+        returnValue = null;
         indentation--;
     }
 
@@ -148,6 +164,7 @@ public class ProgramPrinter  implements japyListener {
 
     @Override
     public void enterOpenConditional(japyParser.OpenConditionalContext ctx) {
+
     }
 
     @Override
@@ -271,7 +288,7 @@ public class ProgramPrinter  implements japyListener {
     String returnValue;
     @Override
     public void enterStatementReturn(japyParser.StatementReturnContext ctx) {
-        returnValue = "return (" + ctx.e.getText() + ", " + returnType + ")";
+        returnValue = "(" + ctx.e.getText() + ", " + returnType + ")";
     }
 
     @Override
@@ -313,7 +330,7 @@ public class ProgramPrinter  implements japyListener {
 
     @Override
     public void enterStatementWrite(japyParser.StatementWriteContext ctx) {
-
+        indentedPrintf("print(%s)", ctx.e.getText());
     }
 
     @Override

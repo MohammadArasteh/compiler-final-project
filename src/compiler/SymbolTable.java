@@ -4,16 +4,19 @@ import java.util.Hashtable;
 import java.util.Map;
 
 public class SymbolTable {
-    public int lineNumber = 0;
+    public int startLine, stopLine;
     public SymbolTable parentNode;
-    public String tableName="";
+    public String tableName;
     public Hashtable<String,String> map = new Hashtable<String,String>();
 
-    public String printItems(){
+    public SymbolTable(String name) {
+        this.tableName = name;
+    }
 
+    public String printItems(){
         StringBuilder itemsStr = new StringBuilder();
         for (Map.Entry<String,String> entry : this.map.entrySet()) {
-            itemsStr.append("Key : ").append(entry.getKey()).append(" | Value : ").append(entry.getValue()).append("\n");
+            itemsStr.append("key = ").append(entry.getKey()).append(", value = ").append(entry.getValue()).append("\n");
         }
         return itemsStr.toString();
     }
@@ -27,30 +30,37 @@ public class SymbolTable {
     }
 
     public String toString(){
-        return "------------- " + this.tableName + " : " + this.lineNumber + " -------------\n" +
+        return "------------- " + this.tableName + ": (" + this.startLine + ", " + this.stopLine + ") -------------\n" +
                 this.printItems() +
                 "-----------------------------------------\n";
     }
     public void tablePrinter(){
-        System.out.print(this.toString());
+        System.out.print(this);
         System.out.println("==============================================");
-        if(this instanceof GlobalScope){
-            for (MethodScope method : ((GlobalScope) this).methods)
-                method.tablePrinter();
+        if(this instanceof GlobalScope) {
+            for (ClassScope scope : ((GlobalScope) this).classes)
+                scope.tablePrinter();
         }
-        else if(this instanceof MethodScope){
+        if(this instanceof ClassScope) {
+            for(MethodScope scope: ((ClassScope)this).methods)
+                scope.tablePrinter();
+        }
+        else if(this instanceof MethodScope) {
             for (BlockTable block : ((MethodScope) this).blocks)
                 block.tablePrinter();
         }
-        else if(this instanceof BlockTable){
+        else if(this instanceof BlockTable) {
             for (BlockTable block : ((BlockTable) this).blocks)
                 block.tablePrinter();
         }
     }
 
-    public String fieldType(){
-        if(this instanceof GlobalScope){
+    public String fieldType() {
+        if(this instanceof GlobalScope) {
             return "GlobalField";
+        }
+        else if(this instanceof ClassScope) {
+            return "ClassField";
         }
         else if(this instanceof MethodScope){
             return "MethodField";
